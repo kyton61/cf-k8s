@@ -1,0 +1,289 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Provision EC2 for k8s
+
+Parameters:
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH Access to the instance
+    Type: "AWS::EC2::KeyPair::KeyName"
+  MyIP:
+    Description: IP address allowed to access EC2
+    Type: String
+  GssnIP:
+    Description: IP address allowed to access EC2
+    Type: String
+  Ec2ImageId:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  Ec2InstanceType:
+    Type: String
+    Default: t3.small
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.5.0.0/16
+      Tags:
+        - Key: Name
+          Value: vpc-cf
+
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: igw-cf
+
+  # IGWをVPCにアタッチ
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+
+  PubSub:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-northeast-1a
+      VpcId: !Ref VPC
+      CidrBlock: 10.5.10.0/24
+      Tags:
+        - Key: Name
+          Value: pub-sub-a-cf
+
+  PubSubRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: pub-sub-a-rt-cf
+
+  # PubSub-インターネット間のルーティング
+  PubSubToInternet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PubSubRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+
+  # ルートテーブルをサブネットに関連付け
+  AssoPubSubRT:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PubSub
+      RouteTableId: !Ref PubSubRT
+
+  EC2Master1: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: !Ref Ec2ImageId
+      KeyName: !Ref KeyName
+      InstanceType: !Ref Ec2InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !Ref PubSub
+          GroupSet:
+            - !Ref EC2MasterSG
+      UserData: !Base64 |
+        #!/bin/bash
+        sudo yum install -y git
+      Tags:
+          - Key: Name
+            Value: ec2-mster-1-cf
+  EC2Master2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref Ec2ImageId
+      KeyName: !Ref KeyName
+      InstanceType: !Ref Ec2InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !Ref PubSub
+          GroupSet:
+            - !Ref EC2MasterSG
+      UserData: !Base64 |
+        #!/bin/bash
+        sudo yum install -y git
+      Tags:
+          - Key: Name
+            Value: ec2-mster-2-cf
+  EC2Master3:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref Ec2ImageId
+      KeyName: !Ref KeyName
+      InstanceType: !Ref Ec2InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !Ref PubSub
+          GroupSet:
+            - !Ref EC2MasterSG
+      UserData: !Base64 |
+        #!/bin/bash
+        sudo yum install -y git
+      Tags:
+          - Key: Name
+            Value: ec2-mster-3-cf
+  EC2Worker1:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref Ec2ImageId
+      KeyName: !Ref KeyName
+      InstanceType: !Ref Ec2InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !Ref PubSub
+          GroupSet:
+            - !Ref EC2MasterSG
+      UserData: !Base64 |
+        #!/bin/bash
+        sudo yum install -y git
+      Tags:
+          - Key: Name
+            Value: ec2-worker-1-cf
+
+
+
+  EC2MasterSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ec2-master-sg-cf
+      GroupDescription: Allow SSH and HTTP and kubernetes master access only MyIP
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        # http
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref MyIP
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref GssnIP
+        # ssh
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIP
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref GssnIP
+        # k8s
+        - IpProtocol: tcp
+          FromPort: 6443
+          ToPort: 6443
+          Description: k8s API server
+          CidrIp: 10.5.0.0/16
+        - IpProtocol: tcp
+          FromPort: 2379
+          ToPort: 2379
+          Description: etcd
+          CidrIp: 10.5.0.0/16
+        - IpProtocol: tcp
+          FromPort: 2380
+          ToPort: 2380
+          Description: etcd
+          CidrIp: 10.5.0.0/16
+        - IpProtocol: tcp
+          FromPort: 10250
+          ToPort: 10250
+          Description: kubelet
+          CidrIp: 10.5.0.0/16
+        - IpProtocol: tcp
+          FromPort: 10251
+          ToPort: 10251
+          Description: kube-scheduler
+          CidrIp: 10.5.0.0/16
+        - IpProtocol: tcp
+          FromPort: 10252
+          ToPort: 10252
+          Description: kube-controller-manager
+          CidrIp: 10.5.0.0/16
+
+  EC2WorkerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ec2-worker-sg-cf
+      GroupDescription: Allow SSH and HTTP and kubernetes worker access only MyIP
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        # http
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref MyIP
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref GssnIP
+        # ssh
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIP
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref GssnIP
+        # k8s
+        - IpProtocol: tcp
+          FromPort: 10250
+          ToPort: 10250
+          Description: kubelet
+          CidrIp: 10.5.0.0/16
+        - IpProtocol: tcp
+          FromPort: 30000
+          ToPort: 32767
+          Description: NodePort Services
+          CidrIp: 10.5.0.0/16
+
+  EC2IAMRole: 
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: ec2-role-cf
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: Allow
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns: 
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+
+  EC2InstanceProfile: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - Ref: EC2IAMRole
+      InstanceProfileName: ec2-instance-profile-cf
+
+
+Outputs:
+  EC2PublicIP1:
+    Value: !GetAtt EC2Master1.PublicIp
+    Description: Public IP of EC2 instance
+  EC2PublicIP2:
+    Value: !GetAtt EC2Master2.PublicIp
+    Description: Public IP of EC2 instance
+  EC2PublicIP3:
+    Value: !GetAtt EC2Master3.PublicIp
+    Description: Public IP of EC2 instance
+  EC2Worker1:
+    Value: !GetAtt EC2Worker1.PublicIp
+    Description: Public IP of EC2 instance
+
