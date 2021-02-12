@@ -9,10 +9,12 @@ aws cloudformation validate-template --template-body file://cf-k8s.yml
 
 ## スタックを作成する
 ```
-aws cloudformation create-stack --stack-name cf-k8s --region ap-northeast-1 --template-body file://cf-k8s.yml \
---parameters ParameterKey=KeyName,ParameterValue=my-key \
-ParameterKey=MyIP,ParameterValue=200.200.200.200/32 \
-ParameterKey=GssnIP,ParameterValue=100.100.100.100/32 \
+aws cloudformation create-stack \
+--stack-name cf-k8s \
+--region ap-northeast-1 \
+--template-body file://cf-k8s.yml \
+--parameters ParameterKey=KeyName,ParameterValue=[your key name] \
+ParameterKey=MyIP,ParameterValue=[XXX.XXX.XXX.XXX/32] \
 --capabilities CAPABILITY_NAMED_IAM \
 ```
 
