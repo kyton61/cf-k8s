@@ -8,9 +8,6 @@ Parameters:
   MyIP:
     Description: IP address allowed to access EC2
     Type: String
-  GssnIP:
-    Description: IP address allowed to access EC2
-    Type: String
   Ec2ImageId:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
@@ -41,7 +38,7 @@ Resources:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref IGW
 
-  PubSub:
+  PubSubA:
     Type: AWS::EC2::Subnet
     Properties:
       AvailabilityZone: ap-northeast-1a
@@ -57,7 +54,7 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: pub-sub-a-rt-cf
+          Value: pub-sub-rt-cf
 
   # PubSub-インターネット間のルーティング
   PubSubToInternet:
@@ -68,12 +65,93 @@ Resources:
       GatewayId: !Ref IGW
 
   # ルートテーブルをサブネットに関連付け
-  AssoPubSubRT:
+  AssoPubSubART:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PubSub
+      SubnetId: !Ref PubSubA
       RouteTableId: !Ref PubSubRT
 
+  # HAProxy用EC2インスタンス
+  EC2HAProxy:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref Ec2ImageId
+      KeyName: !Ref KeyName
+      InstanceType: !Ref Ec2InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !Ref PubSubA
+          PrivateIpAddress: 10.5.10.40
+          GroupSet:
+            - !Ref EC2MasterSG
+      UserData: !Base64 |
+        #!/bin/bash
+        set -euo pipefail
+        # hostnameとhostsの設定
+        hostnamectl set-hostname ec2-haproxy-cf
+        cat <<EOF | sudo tee -a /etc/hosts
+        10.5.10.11 ec2-mster-1-cf
+        10.5.10.12 ec2-mster-2-cf
+        10.5.10.13 ec2-mster-3-cf
+        10.5.10.21 ec2-worker-1-cf
+        10.5.10.40 ec2-haproxy-cf
+        EOF
+        # HAProxyのインストールと設定
+        yum install -y haproxy
+        systemctl enable haproxy
+        grep -q -F 'net.ipv4.ip_nonlocal_bind=1' /etc/sysctl.conf || echo 'net.ipv4.ip_nonlocal_bind=1' >> /etc/sysctl.conf
+        cat >/etc/haproxy/haproxy.cfg <<EOF
+        global
+            log /dev/log    local0
+            log /dev/log    local1 notice
+            chroot /var/lib/haproxy
+            #stats socket /run/haproxy/admin.sock mode 660 level admin
+            stats timeout 30s
+            user haproxy
+            group haproxy
+            daemon
+            # Default SSL material locations
+            ca-base /etc/ssl/certs
+            crt-base /etc/ssl/private
+            # Default ciphers to use on SSL-enabled listening sockets.
+            # For more information, see ciphers(1SSL). This list is from:
+            #  https://hynek.me/articles/hardening-your-web-servers-ssl-ciphers/
+            ssl-default-bind-ciphers ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+3DES:!aNULL:!MD5:!DSS
+            ssl-default-bind-options no-sslv3
+        defaults
+            log global
+            mode    tcp
+            option  tcplog
+            option  dontlognull
+                timeout connect 5000
+                timeout client  50000
+                timeout server  50000
+                #errorfile 400 /etc/haproxy/errors/400.http
+                #errorfile 403 /etc/haproxy/errors/403.http
+                #errorfile 408 /etc/haproxy/errors/408.http
+                #errorfile 500 /etc/haproxy/errors/500.http
+                #errorfile 502 /etc/haproxy/errors/502.http
+                #errorfile 503 /etc/haproxy/errors/503.http
+                #errorfile 504 /etc/haproxy/errors/504.http
+        frontend k8s
+            bind 10.5.10.40:6443
+            default_backend k8s_backend
+        backend k8s_backend
+            balance roundrobin
+            mode tcp
+            server ec2-mster-1-cf 10.5.10.11:6443 check inter 1000
+            server ec2-mster-2-cf 10.5.10.12:6443 check inter 1000
+            server ec2-mster-3-cf 10.5.10.13:6443 check inter 1000
+        EOF
+        # hostname設定のため再起動
+        shutdown -r now
+      Tags:
+          - Key: Name
+            Value: ec2-haproxy-cf
+
+  # k8s master nodes
   EC2Master1: 
     Type: AWS::EC2::Instance
     Properties: 
@@ -84,12 +162,35 @@ Resources:
       NetworkInterfaces: 
         - AssociatePublicIpAddress: "true"
           DeviceIndex: "0"
-          SubnetId: !Ref PubSub
+          SubnetId: !Ref PubSubA
+          PrivateIpAddress: 10.5.10.11
           GroupSet:
             - !Ref EC2MasterSG
       UserData: !Base64 |
         #!/bin/bash
-        sudo yum install -y git
+        # hostnameとhostsの設定 
+        hostnamectl set-hostname ec2-master1-cf
+        cat <<EOF | sudo tee -a /etc/hosts
+        10.5.10.11 ec2-mster-1-cf
+        10.5.10.12 ec2-mster-2-cf
+        10.5.10.13 ec2-mster-3-cf
+        10.5.10.21 ec2-worker-1-cf
+        10.5.10.40 ec2-haproxy-cf
+        EOF
+        # dockerとkubeadmのインストール
+        yum install -y docker && systemctl enable docker
+        cat <<EOF | sudo tee -a /etc/yum.repos.d/kubernetes.repo
+        [kubernetes]
+        name=Kubernetes
+        baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        enabled=1
+        gpgcheck=1
+        repo_gpgcheck=1
+        gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        EOF
+        yum install -y kubeadm
+        # hostname設定のため再起動
+        shutdown -r now
       Tags:
           - Key: Name
             Value: ec2-mster-1-cf
@@ -103,12 +204,35 @@ Resources:
       NetworkInterfaces:
         - AssociatePublicIpAddress: "true"
           DeviceIndex: "0"
-          SubnetId: !Ref PubSub
+          SubnetId: !Ref PubSubA
+          PrivateIpAddress: 10.5.10.12
           GroupSet:
             - !Ref EC2MasterSG
       UserData: !Base64 |
         #!/bin/bash
-        sudo yum install -y git
+        # hostnameとhostsの設定 
+        hostnamectl set-hostname ec2-master2-cf
+        cat <<EOF | sudo tee -a /etc/hosts
+        10.5.10.11 ec2-mster-1-cf
+        10.5.10.12 ec2-mster-2-cf
+        10.5.10.13 ec2-mster-3-cf
+        10.5.10.21 ec2-worker-1-cf
+        10.5.10.40 ec2-haproxy-cf
+        EOF
+        # dockerとkubeadmのインストール
+        yum install -y docker && systemctl enable docker
+        cat <<EOF | sudo tee -a /etc/yum.repos.d/kubernetes.repo
+        [kubernetes]
+        name=Kubernetes
+        baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        enabled=1
+        gpgcheck=1
+        repo_gpgcheck=1
+        gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        EOF
+        yum install -y kubeadm
+        # hostname設定のため再起動
+        shutdown -r now
       Tags:
           - Key: Name
             Value: ec2-mster-2-cf
@@ -122,15 +246,40 @@ Resources:
       NetworkInterfaces:
         - AssociatePublicIpAddress: "true"
           DeviceIndex: "0"
-          SubnetId: !Ref PubSub
+          SubnetId: !Ref PubSubA
+          PrivateIpAddress: 10.5.10.13
           GroupSet:
             - !Ref EC2MasterSG
       UserData: !Base64 |
         #!/bin/bash
-        sudo yum install -y git
+        # hostnameとhostsの設定 
+        hostnamectl set-hostname ec2-master3-cf
+        cat <<EOF | sudo tee -a /etc/hosts
+        10.5.10.11 ec2-mster-1-cf
+        10.5.10.12 ec2-mster-2-cf
+        10.5.10.13 ec2-mster-3-cf
+        10.5.10.21 ec2-worker-1-cf
+        10.5.10.40 ec2-haproxy-cf
+        EOF
+        # dockerとkubeadmのインストール
+        yum install -y docker && systemctl enable docker
+        cat <<EOF | sudo tee -a /etc/yum.repos.d/kubernetes.repo
+        [kubernetes]
+        name=Kubernetes
+        baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        enabled=1
+        gpgcheck=1
+        repo_gpgcheck=1
+        gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        EOF
+        yum install -y kubeadm
+        # hostname設定のため再起動
+        shutdown -r now
       Tags:
           - Key: Name
             Value: ec2-mster-3-cf
+
+  # k8s worker node
   EC2Worker1:
     Type: AWS::EC2::Instance
     Properties:
@@ -141,23 +290,45 @@ Resources:
       NetworkInterfaces:
         - AssociatePublicIpAddress: "true"
           DeviceIndex: "0"
-          SubnetId: !Ref PubSub
+          SubnetId: !Ref PubSubA
+          PrivateIpAddress: 10.5.10.21
           GroupSet:
             - !Ref EC2MasterSG
       UserData: !Base64 |
         #!/bin/bash
-        sudo yum install -y git
+        # hostnameとhostsの設定 
+        hostnamectl set-hostname ec2-worker1-cf
+        cat <<EOF | sudo tee -a /etc/hosts
+        10.5.10.11 ec2-mster-1-cf
+        10.5.10.12 ec2-mster-2-cf
+        10.5.10.13 ec2-mster-3-cf
+        10.5.10.21 ec2-worker-1-cf
+        10.5.10.40 ec2-haproxy-cf
+        EOF
+        # dockerとkubeadmのインストール
+        yum install -y docker && systemctl enable docker
+        cat <<EOF | sudo tee -a /etc/yum.repos.d/kubernetes.repo
+        [kubernetes]
+        name=Kubernetes
+        baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        enabled=1
+        gpgcheck=1
+        repo_gpgcheck=1
+        gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        EOF
+        yum install -y kubeadm
+        # hostname設定のため再起動
+        shutdown -r now
       Tags:
           - Key: Name
             Value: ec2-worker-1-cf
 
-
-
+  # k8s master node用SG
   EC2MasterSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: ec2-master-sg-cf
-      GroupDescription: Allow SSH and HTTP and kubernetes master access only MyIP
+      GroupDescription: Allow SSH and HTTP and kubernetes master access
       VpcId: !Ref VPC
       SecurityGroupIngress:
         # http
@@ -165,19 +336,11 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: !Ref MyIP
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: !Ref GssnIP
         # ssh
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
           CidrIp: !Ref MyIP
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref GssnIP
         # k8s
         - IpProtocol: tcp
           FromPort: 6443
@@ -210,11 +373,12 @@ Resources:
           Description: kube-controller-manager
           CidrIp: 10.5.0.0/16
 
+  # k8s worker node用SG
   EC2WorkerSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: ec2-worker-sg-cf
-      GroupDescription: Allow SSH and HTTP and kubernetes worker access only MyIP
+      GroupDescription: Allow SSH and HTTP and kubernetes worker access
       VpcId: !Ref VPC
       SecurityGroupIngress:
         # http
@@ -222,19 +386,11 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: !Ref MyIP
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: !Ref GssnIP
         # ssh
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
           CidrIp: !Ref MyIP
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref GssnIP
         # k8s
         - IpProtocol: tcp
           FromPort: 10250
@@ -262,10 +418,11 @@ Resources:
               - "sts:AssumeRole"
       Path: "/"
       ManagedPolicyArns: 
+        # 検証用なのでAdmin権限付与
         - "arn:aws:iam::aws:policy/AdministratorAccess"
 
   EC2InstanceProfile: 
-    Type: "AWS::IAM::InstanceProfile"
+    Type: AWS::IAM::InstanceProfile
     Properties: 
       Path: "/"
       Roles: 
