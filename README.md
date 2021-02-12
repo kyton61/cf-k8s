@@ -111,3 +111,7 @@ kubeadm join 10.5.10.40:6443 --token 9y6p3q.ucxx2rssk826axjx \
 ```
 aws cloudformation delete-stack --stack-name cf-k8s
 ```
+
+## 参考
+https://kun432.hatenablog.com/entry/kubernetes-by-kubeadm-on-vagrant-01
+https://knowledge.sakura.ad.jp/20955/
