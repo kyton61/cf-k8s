@@ -1,7 +1,7 @@
-## 全体構成図
+# 全体構成図
 ![k8s_cluster](https://user-images.githubusercontent.com/64095272/107789467-f94b9680-6d94-11eb-994d-d66bac746156.png)
 
-
+# Cloudformation部分
 ## テンプレートをチェックする
 ```
 aws cloudformation validate-template --template-body file://cf-k8s.yml
@@ -23,6 +23,7 @@ ParameterKey=MyIP,ParameterValue=[XXX.XXX.XXX.XXX/32] \
 aws cloudformation describe-stacks --stack-name cf-k8s
 ```
 
+# kubernetes部分
 ## k8s master nodeの設定
 ```
 sudo su -
@@ -108,12 +109,12 @@ kubeadm join 10.5.10.40:6443 --token 9y6p3q.ucxx2rssk826axjx \
 `TODO:HAProxyのアクセスログ確認手順`
 `TODO:HAProxy→podへのルート設定確認`
 
-
+# 後片付け
 ## スタックを削除する
 ```
 aws cloudformation delete-stack --stack-name cf-k8s
 ```
 
-## 参考
+# 参考URL
 https://kun432.hatenablog.com/entry/kubernetes-by-kubeadm-on-vagrant-01
 https://knowledge.sakura.ad.jp/20955/
