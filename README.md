@@ -49,8 +49,7 @@ kubeadm init \
 --service-cidr=10.5.12.0/24 \
 --upload-certs | tee -a /etc/kubernetes/kubeadm-init.result
 ```
-- `--kubernetes-version`はstableを指定している場合がありますが、バージョンコントロールは自分であるということで厳密にバージョン指定しています。
-- `--apiserver-advertise-address`はノードのIPアドレスを指定します。Vagrantでは10.0.2.15というNATインタフェースがあるのですが、これはVMからホストを経由してインターネットに抜けるためのインタフェースであり、ノード間の通信には使えません。kubeadm initするとこのインタフェースがデフォルトでapiserverにbindされてしまうため、明示的に指定しています。
+- `--apiserver-advertise-address`はノードのIPアドレスを指定します。
 - `--control-plane-endpoint`はmasterの負荷分散代表IPアドレスとなる、haproxyのIPとポートを指定します。
 - `--pod-network-cidr`は、Calicoのデフォルトである192.168.0.0/16を指定しています。これがpodに払い出されるIPアドレスになります。
 - `--upload-certs`で、2台め以降のmasterをjoinさせる場合に必要となる証明書をsecretに保存します。これにより、証明書の受け渡しが不要になります。出力結果が後で必要になるのでteeでファイルに出力しています。
