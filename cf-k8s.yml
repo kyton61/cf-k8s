@@ -151,9 +151,8 @@ Resources:
         cat <<"EOF" > /etc/rsyslog.d/haproxy.conf
         $ModLoad imudp
         $UDPServerRun 514
-        $template Haproxy,"%msg%n"
-        local2.info /var/log/haproxy/haproxy.log;Haproxy
-        local0.info /var/log/haproxy/admin.log;Haproxy
+        local2.info /var/log/haproxy/haproxy.log
+        local0.info /var/log/haproxy/admin.log
         # don't log anywhere else
         local0.* ~
         local2.* ~
