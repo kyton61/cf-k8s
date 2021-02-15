@@ -385,6 +385,12 @@ Resources:
           ToPort: 10252
           Description: kube-controller-manager
           CidrIp: 10.5.0.0/16
+          # k8s pod NW
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          Description: kube-controller-manager
+          CidrIp: 192.168.0.0/16
 
   # k8s worker node用SG
   EC2WorkerSG:
@@ -415,6 +421,17 @@ Resources:
           ToPort: 32767
           Description: NodePort Services
           CidrIp: 10.5.0.0/16
+        - IpProtocol: tcp
+          FromPort: 10250
+          ToPort: 10250
+          Description: kubelet
+          CidrIp: 192.168.0.0/16
+        - IpProtocol: tcp
+          FromPort: 30000
+          ToPort: 32767
+          Description: NodePort Services
+          CidrIp: 192.168.0.0/16
+
 
   EC2IAMRole: 
     Type: AWS::IAM::Role

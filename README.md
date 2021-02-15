@@ -31,8 +31,8 @@ sudo su -
 kubeadm init \
 --control-plane-endpoint="10.5.10.40:6443" \
 --apiserver-advertise-address=10.5.10.11 \
---pod-network-cidr=10.5.12.0/24 \
---service-cidr=10.5.13.0/24 \
+--pod-network-cidr=192.168.0.0/16 \
+--service-cidr=10.5.12.0/24 \
 --upload-certs | tee -a /etc/kubernetes/kubeadm-init.result
 ```
 configファイルのコピー
