@@ -343,11 +343,6 @@ Resources:
       GroupDescription: Allow SSH and HTTP and kubernetes master access
       VpcId: !Ref VPC
       SecurityGroupIngress:
-        # http
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: !Ref MyIP
         # ssh
         - IpProtocol: tcp
           FromPort: 22
@@ -399,11 +394,6 @@ Resources:
       GroupDescription: Allow SSH and HTTP and kubernetes worker access
       VpcId: !Ref VPC
       SecurityGroupIngress:
-        # http
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: !Ref MyIP
         # ssh
         - IpProtocol: tcp
           FromPort: 22
@@ -430,7 +420,11 @@ Resources:
           ToPort: 32767
           Description: NodePort Services
           CidrIp: 192.168.0.0/16
-
+        # 動作確認用node port
+        - IpProtocol: tcp
+          FromPort: 30000
+          ToPort: 32767
+          CidrIp: !Ref MyIP
 
   EC2IAMRole: 
     Type: AWS::IAM::Role
