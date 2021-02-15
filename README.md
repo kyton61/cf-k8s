@@ -1,5 +1,6 @@
 ## 全体構成図
-![k8s_cluster](https://user-images.githubusercontent.com/64095272/107789467-f94b9680-6d94-11eb-994d-d66bac746156.png)
+![k8s_cluster](https://user-images.githubusercontent.com/64095272/107956429-7ddf2480-6fe2-11eb-99b2-1310b97b89a4.png)
+
 
 ## Cloudformationでインフラ構築
 ### 前提条件
