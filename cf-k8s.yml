@@ -123,6 +123,11 @@ Resources:
       GroupDescription: Allow SSH and HTTP and kubernetes master access
       VpcId: !Ref VPC
       SecurityGroupIngress:
+        # http
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref MyIP
         # ssh
         - IpProtocol: tcp
           FromPort: 22
