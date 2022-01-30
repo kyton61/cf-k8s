@@ -9,8 +9,8 @@ Parameters:
     Description: IP address allowed to access EC2
     Type: String
   Ec2ImageId:
-    Type: AWS::SSM::Parameter::Value<String>
-    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+    Type: String
+    Default: ami-0992fc94ca0f1415a
   Ec2InstanceType:
     Type: String
     Default: t3.small
@@ -89,11 +89,11 @@ Resources:
       UserData: !Base64 |
         #!/bin/bash
         # hostnameとhostsの設定 
-        hostnamectl set-hostname ec2-master1-cf
+        hostnamectl set-hostname ec2-master-1-cf
         cat <<EOF | sudo tee -a /etc/hosts
-        10.5.10.11 ec2-mster-1-cf
-        10.5.10.12 ec2-mster-2-cf
-        10.5.10.13 ec2-mster-3-cf
+        10.5.10.11 ec2-master-1-cf
+        10.5.10.12 ec2-master-2-cf
+        10.5.10.13 ec2-master-3-cf
         10.5.10.21 ec2-worker-1-cf
         10.5.10.40 ec2-haproxy-cf
         EOF
