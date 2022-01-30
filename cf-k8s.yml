@@ -98,7 +98,13 @@ Resources:
         10.5.10.40 ec2-haproxy-cf
         EOF
         # dockerとkubeadmのインストール
-        yum install -y docker && systemctl enable docker
+        KUBERNETES_VERSION=1.23.3-0
+        DOCKER_VERSION=19.03.13
+        # install docker
+        sudo yum install -y docker-${DOCKER_VERSION}ce-1.amzn2.x86_64
+        sudo systemctl enable docker && sudo systemctl start docker
+
+        # install kubernetes
         cat <<EOF | sudo tee -a /etc/yum.repos.d/kubernetes.repo
         [kubernetes]
         name=Kubernetes
@@ -108,7 +114,13 @@ Resources:
         repo_gpgcheck=1
         gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
         EOF
-        yum install -y kubeadm
+        # install kubeadm, kubelet, kubectl
+        sudo yum install -y kubelet-${KUBERNETES_VERSION} kubeadm-${KUBERNETES_VERSION} kubectl-${KUBERNETES_VERSION} --disableexcludes=kubernetes
+        # enable kubelet
+        sudo systemctl enable --now kubelet
+        # change cgroup driver "systemd" to "cgroupfs" in order to match the docker cgroup
+        sed -i -e "s/KUBELET_EXTRA_ARGS=/KUBELET_EXTRA_ARGS=--cgroup-driver=cgroupfs/g" /etc/sysconfig/kubelet 
+
         # hostname設定のため再起動
         shutdown -r now
       Tags:
