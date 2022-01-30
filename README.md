@@ -65,8 +65,8 @@ cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 calioでCNIの設定
 
 ```
-curl https://docs.projectcalico.org/v3.13/manifests/calico.yaml -o calico-v3.13.yaml
-kubectl apply -f calico-v3.13.yaml
+curl https://docs.projectcalico.org/archive/v3.21/manifests/calico.yaml -O
+kubectl apply -f calico.yaml
 ```
 
 以下のコマンドでmaster nodeがReady状態であることを確認
@@ -114,8 +114,9 @@ configファイルのコピー
 
 ```
 mkdir -p $HOME/.kube
-cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+vi $HOME/.kube/config
 ```
+master node 1台目の/etc/kubernetes/admin.confファイルの中身をコピーする
 
 ### k8s master node thirdの設定
 こちらも同様にapiserver-advertise-addressは自分自身のipアドレスを指定すること
@@ -131,9 +132,9 @@ configファイルのコピー
 
 ```
 mkdir -p $HOME/.kube
-cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+vi $HOME/.kube/config
 ```
-
+master node 1台目の/etc/kubernetes/admin.confファイルの中身をコピーする
 
 ### k8s worker nodeの設定
 master node 1台目をkubeadm initコマンドで設定した際の実行結果からkubeadm joinコマンドを生成する.
