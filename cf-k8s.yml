@@ -10,7 +10,7 @@ Parameters:
     Type: String
   Ec2ImageId:
     Type: String
-    Default: ami-0992fc94ca0f1415a
+    Default: ami-001afa4d000b343d6 # rhel8
   Ec2InstanceType:
     Type: String
     Default: t3.small
